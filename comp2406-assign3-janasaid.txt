@@ -1,0 +1,213 @@
+COMP 2406 2024F Assignment 3
+Name: Gana Said
+Student ID: 101329317 
+
+1. To allow submissions with the name comp2406-assign3-soma.txt or similar
+ I had to change how the application validates the file name.
+  To do that i had to update the Initial expression in validator.js 
+  which only allowed filenames starting with comp2406-tutorial7.
+   i modified it to accept comp2406-assign3 instead by changing the filePrefix.
+
+    Testing this change was simple because the rest of the validation process remained unchanged
+    so i just saved the changes i made and the created a new text file called
+    (comp2406-assign3-janasaid) and then try to uplod it on the validetor it got accepted
+    which means it works!
+
+i didn't really face any challenges with this question it was straightforward to update once you understand the format.
+
+
+
+
+2. while trying to find why a file with questions less than 5 got accepted i realized
+that the current code does not enforce a strict check on the count of questions provided in the submission
+ It only checks for questions but doesn’t compare the actual number of questions parsed against the expected list.
+ //const expectedQuestionList = "1,2,3,4,5";
+
+ to fix this i modified the comparison by adding a return to ensure that the submission is rejected if the number of questions doesn’t match what’s expected
+ this what i did:
+   //if (questionList.length !== numQuestions) {
+   // updateTag("status", `ERROR expected ${numQuestions} questions but got ${questionList.length}`);
+   // return;}
+
+
+   i tested it by modeling the text file i created earlier and only had 3 questions in it
+   this was the error i got: ERROR: Expected 5 questions but got 3.
+
+The only issue I faced while answering this question was understanding what it was really asking
+ like i wasn’t sure if the question was about the number of questions (e.g., there should be exactly five) or about the question numbers themselves (e.g., q1, q2, etc.)
+to find out i tested the system by changing the question numbers in the file i created for example instead of using 1. i wrote 11. 
+to see if it would still be accepted, but it was not, which confirmed that the issue was about the number of questions, not the specific numbers.
+
+
+
+3. to Change the application to handle 6 questions it needs updates across several parts of the codebase
+ First i adjusted validator.js to include the sixth question to ensure that the application expected 6 questions during validation:
+ //const expectedQuestionList = "1,2,3,4,5,6";
+
+
+ Next i updated the database schema in submitdemo.js to add a new column q6:
+ //q1 TEXT, q2 TEXT, q3 TEXT, q4 TEXT, q5 TEXT, q6 TEXT
+
+ Finally i updated the addSubmissionDB function to include the sixth question:
+ //return db.query(`INSERT INTO ${table} (studentID, name, q1, q2, q3, q4, q5, q6) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  //[r.studentID, r.name, r["1"], r["2"], r["3"], r["4"], r["5"], r["6"]]);
+
+  i didn't face challenges with this question it was kinda similar to what i did 
+  for tutorial 6.
+
+
+
+4. To answer this question i investigated how curl or similar tools can bypass client-side validation and send invalid data directly to the server
+ The current system(code) relies entirely on client-side validation in validator.js and since curl doesn’t execute JavaScript it skips those checks and communicates directly with the /uploadSubmission endpoint
+
+to test this I first SSH-ed into the server hosting the application using my IP address
+ I opened a terminal and connected to the server by running
+//ssh student@134.117.132.83
+
+after that i accessed the VM and started the server using this command:
+//deno run --allow-net --allow-read submitdemo.js
+
+With the server running,i created invalid JSON data by using a non-numeric studentID and leaving the q1 field empty and 
+then trird to run it with that command
+//curl -X POST -H "Content-Type: application/json" -d '{"studentID": "ABC123", "name": "Invalid User", "q1": "", "q2": "Answer 2", "q3": "Answer 3", "q4": "Answer 4", "q5": "Answer 5"}' http://localhost:8000/uploadSubmission
+
+The server accepted the submission because it lacked server-side validation
+ This shows that tools like curl can easily bypass client checks highlighting the importance of adding server-side validation to ensure the expected data.
+
+ The biggest challenge i faced was confirming that invalid data had been accepted 
+ so to do this i had to look at the server logs and check the database to verify that the malformed submission was stored.
+
+
+
+5. To implement server-side validation, I reused parts of the client-side validation from validator.js to ensure consistency
+First, I copied the loop that checks if any required fields are missing or empty. On the client side, it checks fields directly from the UI or the parsed file, but on the server
+ I had to adjust it to validate the JSON object sent by the client.
+ //const requiredFields = ["studentID", "name", "q1", "q2", "q3", "q4", "q5"];
+//for (const field of requiredFields) {
+   // if (!submission[field] || submission[field].trim() === "") {
+   //  return { valid: false, message: `Missing or empty field: ${field}` };
+   //} }
+I also added filename validation since it was part of the original client-side validation
+this ensures that filenames follow the required format and prevent invalid file submissions
+to do that i updated the client to send the filename as part of the JSON object
+//filename: document.getElementById("assignmentFile").files[0].name,
+And on the server, I added this validation:
+//const validFilename = /^comp2406-tutorial7-[a-zA-Z0-9]+\.txt$/;(or-assign3)
+//if (!validFilename.test(submission.filename)) {
+//    return { valid: false, message: "Invalid filename" };}
+
+For the file contents, I updated the client to read and send the entire file as part of the JSON payload
+so i added this line:
+
+//contents: fileContents,
+
+On the server I split the contents into lines and performed these to ensure the first line matches SubmissionName.
+and Check for Name: and StudentID..ect) also Verify the file ends with a newline character (\n):
+
+//const lines = submission.contents.split("\n");
+//first check
+//if (lines[0].trim() !== "SubmissionName") {
+    return { valid: false, message: "Invalid first line: expected 'SubmissionName'" };
+}
+
+// sec Check
+if (!lines[1].startsWith("Name:")) {
+    return { valid: false, message: "Missing 'Name:' line" };
+}
+if (!lines[2].startsWith("StudentID:")) {
+    return { valid: false, message: "Missing 'StudentID:' line" };
+}
+
+// third check
+if (!submission.contents.endsWith("\n")) {
+    return { valid: false, message: "File does not end with UNIX line endings" };
+}
+
+Another adjustment i made was with error handling i modified the logic so the server responds with 400 Bad Request for invalid submissions
+//if (!validateSubmission(submission)) {
+//    return {
+//        status: 400,
+//        contentType: "text/plain",
+//        contents: `Bad Request: ${validation.message}`
+//    };}
+
+Finally I integrated this validation into the addSubmission handler to ensure invalid submissions were rejected before any database operations
+this prevents invalid data from being stored and ensuring data integrity
+this what added in:
+// const validation = validateSubmission(submission);
+//   if (!validation.valid) {
+//        return {
+//            status: 400,
+//          contentType: "text/plain",
+//          contents: `Bad Request: ${validation.message}`
+//       }; }
+
+//    const result = addSubmissionDB(db, table, submission);
+
+//   return {
+//     status: 200,
+//   contentType: "text/plain",
+//  contents: "Submission successfully uploaded."};
+
+ The biggest issue I faced was handling filenames. Initially, I didn’t include the filename in the data sent to the server,
+  so I had to update the client-side code to send the filename along with the content.
+
+6. to make sure each student ID can only upload once i added a check in the addSubmissionDB function
+ so before inserting a new submission the server looks up the database to see if the studentID already exists
+ 
+//function addSubmissionDB(db, table, r) {
+    const existing = db.query(`SELECT COUNT(*) FROM ${table} WHERE studentID = ?`, [r.studentID])[0];
+    if (existing[0] > 0) {
+        return { conflict: true };
+    }
+    return db.query(`INSERT INTO ${table} (studentID, name, section, q1, q2, q3, q4, q5) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.studentID, r.name, r.section, r["1"], r["2"], r["3"], r["4"], r["5"]]);
+}
+
+If it does the server doesn’t add the new submission and instead returns a 409 Conflict status with the message "Conflict."
+i then modified addSubmission to return a 409 Conflict response:
+//if (result.conflict) {
+    return { status: 409, contentType: "text/plain", contents: "Conflict" };
+}
+On the client side(validetor.js) i updated the status message to:
+//updateTag("status", "ERROR Upload forbidden, student has already submitted.");
+after this if statment:
+//if (response.status === 200)
+This changes worked well even though testing required multiple uploads with the same ID to confirm the conflict behavior
+
+
+The biggest challenge for this part was ensuring that the database query to check for existing student IDs worked efficiently
+ At first i mistakenly queried the entire table instead of just counting matches for the specific studentID which caused unnecessary overhead and slower performance
+  i fixed this by using a COUNT(*) query that checks only for the given studentID.
+
+
+
+7. to report empty answers on the analysis page i updated the analyzeSubmissionsDB function to calculate these values and added this information to the analysis object
+to do this i added these lines to the function:
+
+//analysis.totalSubmissions = totalSubmissions;
+//analysis.emptyCounts = emptyCounts;
+ then i updated the showAnalysis function to display the total number of submissions and the empty answer counts:
+ //const emptyAnswersReport = analysis.emptyCounts
+    .map((count, index) => `<p>Q${index + 1}: ${count} empty</p>`)
+    .join("");
+
+var analysisBody = `
+  <body>
+    <h1>Submissions Analysis</h1>
+    <p>Total Submissions: ${analysis.totalSubmissions}</p>
+    <p>Empty Answers:</p>
+    ${emptyAnswersReport}
+    <form method="get" action="/">
+      <button type="submit">Home</button>
+    </form>
+  </body>
+`;
+
+
+
+
+For this question, i was overriding the analyzeSubmissionsDB function to return the empty answers only 
+but then i realized that i need to return the total number of submissions as well so i 
+needed to modify that function and not override.
+
